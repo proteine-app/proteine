@@ -1,10 +1,52 @@
 /**
  * API Service - Integrates with Open Food Facts API
- * Provides food search functionality with caching
+ * Provides food search functionality with caching and retry logic
  */
 
 const API_BASE_URL = 'https://world.openfoodfacts.org/cgi/search.pl'
 const API_TIMEOUT = 10000
+const MAX_RETRIES = 3
+const RETRY_DELAYS = [3000, 6000, 12000] // 3s, 6s, 12s in milliseconds
+
+/**
+ * Fetch with exponential backoff retry logic
+ * @param {string} url - the URL to fetch
+ * @param {Object} options - fetch options
+ * @returns {Promise<Response>} the fetch response
+ * @throws {Error} if all retries fail
+ */
+async function fetchWithRetry(url, options = {}) {
+  let lastError
+
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT)
+
+      const response = await fetch(url, {
+        ...options,
+        signal: controller.signal,
+      })
+      clearTimeout(timeoutId)
+
+      return response
+    } catch (error) {
+      lastError = error
+
+      // If this wasn't the last attempt, wait before retrying
+      if (attempt < MAX_RETRIES) {
+        const delayMs = RETRY_DELAYS[attempt]
+        console.warn(
+          `Fetch attempt ${attempt + 1} failed: ${error.message}. Retrying in ${delayMs}ms...`
+        )
+        await new Promise(resolve => setTimeout(resolve, delayMs))
+      }
+    }
+  }
+
+  // All retries exhausted
+  throw lastError
+}
 
 /**
  * Search for food items by name using Open Food Facts API
@@ -20,13 +62,7 @@ export async function searchFood(name, cacheService) {
       action: 'process',
     })
 
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT)
-
-    const response = await fetch(`${API_BASE_URL}?${params}`, {
-      signal: controller.signal,
-    })
-    clearTimeout(timeoutId)
+    const response = await fetchWithRetry(`${API_BASE_URL}?${params}`)
 
     if (!response.ok) {
       console.error('API response not ok:', response.status)

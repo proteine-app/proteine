@@ -12,10 +12,13 @@ describe('API Service', () => {
     }
     // Clear all mocks
     vi.clearAllMocks()
+    // Mock timers for retry logic
+    vi.useFakeTimers()
   })
 
   afterEach(() => {
     vi.clearAllMocks()
+    vi.useRealTimers()
   })
 
   describe('searchFood', () => {
@@ -112,9 +115,64 @@ describe('API Service', () => {
     it('should return empty array on network error', async () => {
       global.fetch = vi.fn().mockRejectedValue(new Error('Network error'))
 
-      const result = await searchFood('chicken', mockCacheService)
+      const resultPromise = searchFood('chicken', mockCacheService)
+
+      // Fast-forward through all retry delays: 3s, 6s, 12s
+      await vi.advanceTimersByTimeAsync(3000)
+      await vi.advanceTimersByTimeAsync(6000)
+      await vi.advanceTimersByTimeAsync(12000)
+
+      const result = await resultPromise
 
       expect(result).toEqual([])
+    })
+
+    it('should retry on network error and succeed on second attempt', async () => {
+      const mockFetch = vi
+        .fn()
+        .mockRejectedValueOnce(new Error('Network error'))
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            products: [
+              {
+                product_name: 'Chicken Breast',
+                proteins_100g: 26,
+              },
+            ],
+          }),
+        })
+
+      global.fetch = mockFetch
+
+      const resultPromise = searchFood('chicken', mockCacheService)
+
+      // Fast-forward through first retry delay (3000ms)
+      await vi.advanceTimersByTimeAsync(3000)
+
+      const result = await resultPromise
+
+      expect(result).toHaveLength(1)
+      expect(result[0].name).toBe('Chicken Breast')
+      expect(mockFetch).toHaveBeenCalledTimes(2)
+    })
+
+    it('should return empty array after all retries are exhausted', async () => {
+      global.fetch = vi
+        .fn()
+        .mockRejectedValue(new Error('Network error'))
+
+      const resultPromise = searchFood('chicken', mockCacheService)
+
+      // Fast-forward through all retry delays: 3s, 6s, 12s
+      await vi.advanceTimersByTimeAsync(3000)
+      await vi.advanceTimersByTimeAsync(6000)
+      await vi.advanceTimersByTimeAsync(12000)
+
+      const result = await resultPromise
+
+      expect(result).toEqual([])
+      expect(global.fetch).toHaveBeenCalledTimes(4) // 1 initial + 3 retries
     })
   })
 
