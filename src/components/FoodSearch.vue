@@ -44,6 +44,7 @@
 import { ref } from 'vue'
 import { searchFood } from '../services/api.js'
 import * as storage from '../services/storage.js'
+import { error as showError } from '../services/notifications'
 
 let debounceTimer
 
@@ -76,18 +77,18 @@ export default {
           const searchResults = await searchFood(searchQuery.value, storage)
           results.value = searchResults
           if (searchResults.length === 0 && searchQuery.value.trim()) {
-            // searchFood returns [] on error, not an exception, so we can't distinguish
-            // But we already show "No foods found" for empty results
+            showError('No foods found. Try a different name.')
           }
         } catch (error) {
           console.error('Search error:', error)
+          let errorMsg = 'Failed to search foods. Please try again.'
           if (error.name === 'AbortError') {
-            errorMessage.value = 'Search timed out. Please try again.'
+            errorMsg = 'Search timed out. Please try again.'
           } else if (!navigator.onLine) {
-            errorMessage.value = 'No internet connection. Please check your network.'
-          } else {
-            errorMessage.value = 'Failed to search foods. Please try again.'
+            errorMsg = 'No internet connection. Please check your network.'
           }
+          errorMessage.value = errorMsg
+          showError(errorMsg)
         } finally {
           isLoading.value = false
         }

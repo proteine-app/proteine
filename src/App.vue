@@ -1,5 +1,7 @@
 <template>
   <div id="app">
+    <Toast />
+
     <header class="app-header">
       <h1>🥗 Protein Tracker</h1>
     </header>
@@ -35,6 +37,7 @@
 </template>
 
 <script>
+import Toast from './components/Toast.vue'
 import DailyTracker from './components/DailyTracker.vue'
 import FoodSearch from './components/FoodSearch.vue'
 import FoodEntry from './components/FoodEntry.vue'
@@ -53,6 +56,7 @@ import {
 export default {
   name: 'App',
   components: {
+    Toast,
     DailyTracker,
     FoodSearch,
     FoodEntry,
